@@ -1,0 +1,62 @@
+name: Convert repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository_url:
+        required: true
+        description: The full URL of the repository to convert
+
+jobs:
+  convert-and-download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        
+      - name: Cline target
+        run: |
+          git clone ${{ inputs.repository_url }}
+          
+      - name: Zip repository
+        run: |
+          ls | xargs zip -r folder.zip
+          
+      - name: Convert to hex
+        run: |
+          xxd -p folder.zip > folder.txt
+          
+      - name: Split
+        run: |
+          split -b 50m folder.txt folder.txt_
+
+      - name: Zip chunks
+        run: |
+          zip -r chunks.zip folder.txt_*
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          echo "::set-output name=release_tag::$(date +'%Y.%m.%d_%H-%M-%S')"
+
+      - name: Create GitHub release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.ACTION_TOKENS }}
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          release_name: Release ${{ steps.tag.outputs.release_tag }}
+          draft: false
+          prerelease: false
+          
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.ACTION_TOKENS }
+        with:
+          upload_url: ${{ step.create_release.outputs.upload_url }}
+          asset_path: ./chunks.zip
+          asset_name: chunks.zip
+          asset_content_type: application/zip
+          path: chunks.zip
